@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpyro.distributions as dist
 from jax.scipy.special import ndtri as probit
-from numpyro.handlers import seed
+from numpyro.handlers import seed, substitute, trace
 
 
 def simulate_outcomes(
@@ -16,7 +16,7 @@ def simulate_outcomes(
 
 
 def set_weights(agent, social_w):
-    return agent.do({"_social_w": probit(social_w)})
+    return substitute(agent, {"_social_w": probit(social_w)})
 
 
 def simulate_experiment(
@@ -27,15 +27,22 @@ def simulate_experiment(
     agent_weights=None,
     group_bias=0.5,
     agent_bias=0.5,
+    certainty=4,
 ):
     key = rng_key
     key, subkey = jax.random.split(key)
     y0 = simulate_outcomes(
-        subkey, bias=agent_bias, certainty=4, n_trials=n_trials_per_agent * n_agents
+        subkey,
+        bias=agent_bias,
+        certainty=certainty,
+        n_trials=n_trials_per_agent * n_agents,
     )
     key, subkey = jax.random.split(key)
     yg = simulate_outcomes(
-        subkey, bias=group_bias, certainty=4, n_trials=n_trials_per_agent * n_agents
+        subkey,
+        bias=group_bias,
+        certainty=certainty,
+        n_trials=n_trials_per_agent * n_agents,
     )
     participant_id = jnp.repeat(jnp.arange(n_agents), n_trials_per_agent)
     input_data = {
@@ -49,7 +56,13 @@ def simulate_experiment(
     if agent_weights is not None:
         agents = set_weights(agents, social_w=jnp.array(agent_weights))
     key, subkey = jax.random.split(key)
-    y1_dist = seed(agents, subkey)()
+    agents = seed(agents, subkey)
+    y1_dist = agents()
     key, subkey = jax.random.split(key)
     y1 = y1_dist.sample(subkey)
-    return input_data, y1
+    params = dict()
+    sites = trace(agents).get_trace()
+    for site_name, site in sites.items():
+        if (site["type"] in ["deterministic", "sample"]) and (site_name != "obs"):
+            params[site_name] = site["value"]
+    return input_data, y1, params
