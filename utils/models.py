@@ -6,11 +6,21 @@ import jax
 import jax.numpy as jnp
 import numpyro
 import numpyro.distributions as dist
+from numpyro.handlers import seed, substitute
 from numpyro.infer.reparam import LocScaleReparam
 
 numpyro.set_host_device_count(4)
 
 REPARAM_CONFIG = {"_social_w": LocScaleReparam(0)}
+
+
+def compute_loglikelihood(model, samples, observations):
+    def _log_prob(carry, parameters):
+        m = seed(substitute(model, parameters), jax.random.key(0))
+        return carry, m().log_prob(observations)
+
+    _, log_p = jax.lax.scan(_log_prob, None, samples)
+    return log_p
 
 
 def reparametrize(model: Callable):
@@ -149,9 +159,9 @@ def wba(
     a0, b0 = 1, 1
     w0 = self.kappa * (1 - self.social_w)
     wg = self.kappa * self.social_w
-    self.a1 = w0[participant_id] * y0 + wg[participant_id] * yg + a0
-    self.b1 = total_count - w0[participant_id] * y0 - wg[participant_id] * yg + b0
-    return dist.BetaBinomial(self.a1, self.b1, total_count=total_count)
+    a1 = w0[participant_id] * y0 + wg[participant_id] * yg + a0
+    b1 = total_count - w0[participant_id] * y0 - wg[participant_id] * yg + b0
+    return dist.BetaBinomial(a1, b1, total_count=total_count)
 
 
 @reparametrize

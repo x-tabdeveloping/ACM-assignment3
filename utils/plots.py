@@ -9,6 +9,8 @@ from numpyro.diagnostics import hpdi
 from plotly.subplots import make_subplots
 from scipy.stats import kendalltau
 
+from .model_comparison import elpd_kfold
+
 
 def plot_predictives(
     prior_predictives: dict[str, dict],
@@ -29,7 +31,7 @@ def plot_predictives(
     )
     for i_model, model_name in enumerate(model_names):
         subfig = ft.plot_predictive_check(
-            prior_predictives[model_name]["obs"], obs=obs.astype(int)
+            prior_predictives[model_name], obs=obs.astype(int)
         )
         for trace in subfig.data:
             trace.showlegend = (i_model == 0) and trace.showlegend
@@ -39,7 +41,7 @@ def plot_predictives(
                 row=1,
             )
         subfig = ft.plot_predictive_check(
-            posterior_predictives[model_name]["obs"], obs=obs.astype(int)
+            posterior_predictives[model_name], obs=obs.astype(int)
         )
         for trace in subfig.data:
             trace.showlegend = False
@@ -98,7 +100,7 @@ def plot_forests(
             if var_samples.shape[0] != 1:
                 name += f"[{i_level}]"
             if true_params is None:
-                x0 = name
+                x0 = i_level
             else:
                 x0 = true_params[variable][i_level]
             fig.add_scatter(
@@ -170,5 +172,27 @@ def plot_kendall_taus(predictives, obs):
         height=300,
         margin=dict(t=30, r=10, b=10, l=10),
         font=dict(size=16),
+    )
+    return fig
+
+
+def plot_elpd_kfold(rng_key, models, input_data, y1):
+    fig = go.Figure()
+    key = rng_key
+    for model_name, model in models.items():
+        key, subkey = jax.random.split(key)
+        mean, se = elpd_kfold(subkey, model, input_data, y1, k=10)
+        fig.add_scatter(
+            y0=model_name,
+            x=[mean],
+            showlegend=False,
+            error_x=dict(type="data", array=[float(se)], visible=True),
+        )
+    fig = fig.update_layout(
+        width=400,
+        height=120,
+        template="plotly_white",
+        font=dict(size=16),
+        margin=dict(r=10, t=10, b=10, l=10),
     )
     return fig
