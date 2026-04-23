@@ -1,0 +1,5 @@
+firetruck==0.1.6
+plotly==6.3.0
+scikit-learn==1.8.0
+arviz==1.0.0
+
